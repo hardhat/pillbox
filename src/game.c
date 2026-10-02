@@ -15,6 +15,8 @@
 #define HALF_TILE_PIXELS (TILE_SIZE_PIXELS / 2)
 
 uint16_t seed;
+int16_t x_scroll;
+int16_t x_scroll_target;
 
 struct Pillbox
 {
@@ -166,24 +168,60 @@ static const int8_t terrain_right_half[TERRAIN_L1R1_E_G] = {
 };
 
 static int find_surface_type(uint16_t left_pixels, uint16_t right_pixels,
-                             int *top_row)
+                             int column, int *top_row)
 {
     int left_half = left_pixels / HALF_TILE_PIXELS;
     int right_half = right_pixels / HALF_TILE_PIXELS;
+    int selected_type = -1;
+    int selected_top = 0;
+    int matches = 0;
 
     for(int type = 0; type < TERRAIN_L1R1_E_G; type++)
     {
+        if((type == TERRAIN_L1R1_E || type == TERRAIN_L1R1_O ||
+            type == TERRAIN_L3R3_E || type == TERRAIN_L3R3_O) &&
+           (type & 1) != (column & 1))
+            continue;
+
         int left_offset = left_half - terrain_left_half[type];
         int right_offset = right_half - terrain_right_half[type];
         if(left_offset == right_offset && left_offset >= 0 &&
            (left_offset & 1) == 0)
         {
-            *top_row = left_offset / 2;
-            if(*top_row + 1 < MAP_HEIGHT)
-                return type;
+            int candidate_top = left_offset / 2;
+            if(candidate_top + 1 < MAP_HEIGHT)
+            {
+                matches++;
+                if(rand() % matches == 0)
+                {
+                    selected_type = type;
+                    selected_top = candidate_top;
+                }
+            }
         }
     }
-    return -1;
+    if(selected_type >= 0)
+        *top_row = selected_top;
+    return selected_type;
+}
+
+static void perturb_terrain(void)
+{
+    int last_perturbation = -3;
+
+    for(int x = 2; x < MAP_WIDTH - 1; x++)
+    {
+        if(x - last_perturbation < 3 ||
+           elevation_pixels[x - 1] != elevation_pixels[x] ||
+           elevation_pixels[x] != elevation_pixels[x + 1] ||
+           rand() % 4 != 0)
+            continue;
+
+        int perturbation = rand() % 5 == 0 ? -3 * HALF_TILE_PIXELS :
+                          (rand() & 1 ? HALF_TILE_PIXELS : -HALF_TILE_PIXELS);
+        elevation_pixels[x] += perturbation;
+        last_perturbation = x;
+    }
 }
 
 void game_init(void)
@@ -280,11 +318,14 @@ void generate_terrain(void)
     }
     feature_x += gap + (gap_index < extra_gaps);
 
+    perturb_terrain();
+
     for(int x = 0; x < MAP_WIDTH; x++)
     {
         int top_row;
         int surface_type = find_surface_type(elevation_pixels[x],
                                              elevation_pixels[x + 1],
+                                             x,
                                              &top_row);
         if(surface_type < 0)
         {
@@ -292,9 +333,6 @@ void generate_terrain(void)
                        elevation_pixels[x], elevation_pixels[x + 1]);
             continue;
         }
-        if(surface_type == TERRAIN_L1R1_E && (x & 1))
-            surface_type = TERRAIN_L1R1_O;
-
         debug_logf("x=%d, edges_px=%u,%u, surface_type=%d", x,
                    elevation_pixels[x], elevation_pixels[x + 1], surface_type);
         map0[top_row * MAP_WIDTH + x] = terrain1x2[surface_type].tiles[0];
@@ -390,8 +428,20 @@ void place_pillboxes(void)
 void game_update(uint16_t delta)
 {
     (void)delta;
-    seed++;    
+    seed++;
 
+    if( x_scroll_target != x_scroll)
+    {
+        int16_t diff = x_scroll_target - x_scroll;
+        uint16_t abs_diff = diff > 0 ? diff : -diff;
+        int16_t increment=3;
+        if(abs_diff<increment)
+            increment=abs_diff;
+        if(x_scroll < x_scroll_target)
+            x_scroll+=increment;
+        else if(x_scroll > x_scroll_target)
+            x_scroll-=increment;
+    }
 }
 
 void game_reset(void)
@@ -401,15 +451,34 @@ void game_reset(void)
     place_pillboxes();
     show_map(map0, MAP_WIDTH, MAP_HEIGHT);
     show_map1(map1, MAP_WIDTH, MAP_HEIGHT);
+    x_scroll = 0;
+    x_scroll_target = 0;
+    zvb_ctrl_l0_scr_x_low = x_scroll & 0xFF;
+    zvb_ctrl_l0_scr_x_high = (x_scroll >> 8) & 0xFF;
+    zvb_ctrl_l1_scr_x_low = x_scroll & 0xFF;
+    zvb_ctrl_l1_scr_x_high = (x_scroll >> 8) & 0xFF;
 }
 
 void game_render(void)
 {
-
+    zvb_ctrl_l0_scr_x_low = x_scroll & 0xFF;
+    zvb_ctrl_l0_scr_x_high = (x_scroll >> 8) & 0xFF;
+    zvb_ctrl_l1_scr_x_low = x_scroll & 0xFF;
+    zvb_ctrl_l1_scr_x_high = (x_scroll >> 8) & 0xFF;
 }
 
 void game_handle_input(uint8_t input, bool pressed)
 {
     if(input == INPUT_A && pressed)
         game_reset();
+    if(input == INPUT_LEFT && pressed)
+    {
+        if(x_scroll_target >= 8)
+            x_scroll_target-=8;
+    }
+    if(input == INPUT_RIGHT && pressed)
+    {
+        if(x_scroll_target <= (MAP_WIDTH-SCREEN_WIDTH)*TILE_SIZE_PIXELS-8)
+            x_scroll_target+=8;
+    }
 }
