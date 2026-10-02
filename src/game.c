@@ -25,6 +25,7 @@
 #define TILE_SIZE_PIXELS 16
 #define HALF_TILE_PIXELS (TILE_SIZE_PIXELS / 2)
 #define SCROLL_SPEED 8
+#define TRACK_SCROLL_SPEED 12 // Must exceed the rocket's top horizontal speed (about 7 px/frame)
 
 uint16_t seed;
 int16_t x_scroll;
@@ -386,8 +387,8 @@ void generate_terrain(void)
                        elevation_pixels[x], elevation_pixels[x + 1]);
             continue;
         }
-        debug_logf("x=%d, edges_px=%u,%u, surface_type=%d", x,
-                   elevation_pixels[x], elevation_pixels[x + 1], surface_type);
+        // debug_logf("x=%d, edges_px=%u,%u, surface_type=%d", x,
+        //            elevation_pixels[x], elevation_pixels[x + 1], surface_type);
         map0[top_row * MAP_WIDTH + x] = terrain1x2[surface_type].tiles[0];
         map0[(top_row + 1) * MAP_WIDTH + x] =
             terrain1x2[surface_type].tiles[1];
@@ -519,7 +520,11 @@ void update_rocket(void)
         return;
 
     // Drag acts on velocity relative to the moving air, so wind pushes the rocket
-    int32_t wind_vx = (int32_t)wind * WIND_KMH_Q16;
+    // SDCC's signed 16x16->32 multiply helper tests the wrong bytes for sign, so multiply unsigned
+    uint16_t wind_magnitude = wind < 0 ? -wind : wind;
+    int32_t wind_vx = (int32_t)((uint32_t)wind_magnitude * WIND_KMH_Q16);
+    if(wind < 0)
+        wind_vx = -wind_vx;
     rocket.ax = (wind_vx - rocket.vx) >> DRAG_SHIFT;
     rocket.ay = GRAVITY_Q16 - (rocket.vy >> DRAG_SHIFT);
 
@@ -555,14 +560,27 @@ void game_update(uint16_t delta)
     (void)delta;
     seed++;
 
-    if(x_scroll_target+x_scroll_speed >= 0 && x_scroll_target+x_scroll_speed <= (MAP_WIDTH-SCREEN_WIDTH)*TILE_SIZE_PIXELS)
+    update_rocket();
+
+    int16_t max_scroll = (MAP_WIDTH-SCREEN_WIDTH)*TILE_SIZE_PIXELS;
+    if(rocket.active)
+    {
+        // Follow the rocket; the target is left alone after landing so the view stays put
+        int16_t target = rocket.x - SCREEN_WIDTH*TILE_SIZE_PIXELS/2;
+        if(target < 0)
+            target = 0;
+        if(target > max_scroll)
+            target = max_scroll;
+        x_scroll_target = target;
+    }
+    else if(x_scroll_target+x_scroll_speed >= 0 && x_scroll_target+x_scroll_speed <= max_scroll)
         x_scroll_target += x_scroll_speed;
 
     if( x_scroll_target != x_scroll)
     {
         int16_t diff = x_scroll_target - x_scroll;
         uint16_t abs_diff = diff > 0 ? diff : -diff;
-        int16_t increment=6;
+        int16_t increment = rocket.active ? TRACK_SCROLL_SPEED : 6;
         if(abs_diff<increment)
             increment=abs_diff;
         if(x_scroll < x_scroll_target)
@@ -581,7 +599,6 @@ void game_update(uint16_t delta)
         sprintf(buffer, "ANGLE %3d", pillbox[0].angle);
         sprite_print(2*TILE_SIZE_PIXELS,4*TILE_SIZE_PIXELS, buffer);
     }
-    update_rocket();
 }
 
 void game_reset(void)
