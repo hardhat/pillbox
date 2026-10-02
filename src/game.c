@@ -1,5 +1,16 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+
+#ifndef __SDCC_VERSION_MAJOR
+#define __at(addr) (char *)(addr)
+#define __naked
+#define __sfr
+#define va_list char * //struct {int dummy; }
+#define va_start(ap, last)
+#define va_end(ap)
+#endif
 
 #include<zvb_hardware.h>
 #include<zvb_gfx.h>
@@ -17,11 +28,23 @@
 uint16_t seed;
 int16_t x_scroll;
 int16_t x_scroll_target;
+int16_t wind; // positive is wind blowing to the right, negative is wind blowing to the left, in km/h
 
 struct Pillbox
 {
     uint8_t x,y; // in tiles
+    uint8_t angle,power; // Angle in degrees, power in percent (max 100)
 } pillbox[2];
+
+struct Rocket
+{
+    uint8_t angle,power; // Angle in degrees, power in percent (max 100)
+    int16_t x,y; // Position in pixels
+    int16_t vx,vy; // Velocity in pixels per frame
+    int16_t ax,ay; // Acceleration in pixels per frame squared
+    bool active; // Whether the rocket is currently active (1) or not (0)
+    uint8_t sprite_index;
+} rocket;
 
 uint16_t elevation_pixels[MAP_WIDTH + 1];
 
@@ -425,6 +448,40 @@ void place_pillboxes(void)
 
 }
 
+void launch_rocket(uint8_t angle, uint8_t power)
+{
+    rocket.active = true;
+    rocket.angle = angle;
+    rocket.power = power;
+    rocket.x = pillbox[0].x * TILE_SIZE_PIXELS;
+    rocket.y = (elevation_pixels[pillbox[0].x] + TILE_SIZE_PIXELS - 1);
+    rocket.vx = 0;
+    rocket.vy = 0;
+    rocket.ax = 0;
+    rocket.ay = 0;
+    rocket.sprite_index = 0;
+}
+
+void update_rocket(void)
+{
+    if(!rocket.active)
+        return;
+
+    rocket.vx += rocket.ax;
+    rocket.vy += rocket.ay;
+    rocket.x += rocket.vx;
+    rocket.y += rocket.vy;
+}
+
+void sprite_print(int16_t x, int16_t y, const char *str)
+{
+    for(int i = 0; str[i] != '\0'; i++) {
+        if(str[i] == ' ')
+            continue;
+        add_sprite(x + i * TILE_SIZE_PIXELS, y, str[i],0);
+    }
+}
+
 void game_update(uint16_t delta)
 {
     (void)delta;
@@ -442,6 +499,17 @@ void game_update(uint16_t delta)
         else if(x_scroll > x_scroll_target)
             x_scroll-=increment;
     }
+
+    char buffer[16];
+    reset_sprite();
+    sprite_print(2*TILE_SIZE_PIXELS,3*TILE_SIZE_PIXELS, "POWER ");
+    sprintf(buffer, "%3d", pillbox[0].power);
+    sprite_print(8*TILE_SIZE_PIXELS,3*TILE_SIZE_PIXELS, buffer);
+    sprite_print(2*TILE_SIZE_PIXELS,4*TILE_SIZE_PIXELS, "ANGLE ");
+    sprintf(buffer, "%3d", pillbox[0].angle);
+    sprite_print(8*TILE_SIZE_PIXELS,4*TILE_SIZE_PIXELS, buffer);
+
+    update_rocket();
 }
 
 void game_reset(void)
@@ -449,8 +517,19 @@ void game_reset(void)
     srand(seed);
     generate_terrain();
     place_pillboxes();
+    pillbox[0].angle = 45;
+    pillbox[0].power = 30;
     show_map(map0, MAP_WIDTH, MAP_HEIGHT);
     show_map1(map1, MAP_WIDTH, MAP_HEIGHT);
+    rocket.active = false;
+    rocket.x = 0;
+    rocket.y = 0;
+    rocket.vx = 0;
+    rocket.vy = 0;
+    rocket.ax = 0;
+    rocket.ay = 0;
+    rocket.sprite_index = 0;
+    clear_sprites();
     x_scroll = 0;
     x_scroll_target = 0;
     zvb_ctrl_l0_scr_x_low = x_scroll & 0xFF;
@@ -465,20 +544,53 @@ void game_render(void)
     zvb_ctrl_l0_scr_x_high = (x_scroll >> 8) & 0xFF;
     zvb_ctrl_l1_scr_x_low = x_scroll & 0xFF;
     zvb_ctrl_l1_scr_x_high = (x_scroll >> 8) & 0xFF;
+
+    if(rocket.active)
+    {
+        uint8_t tile = 0; // Replace with the actual tile index for the rocket sprite
+        uint8_t flags = 0; // Replace with the actual flags for the rocket sprite
+        // Render the rocket sprite at its current position
+        if(rocket.sprite_index == 0)
+            rocket.sprite_index = add_sprite(rocket.x +TILE_SIZE_PIXELS - x_scroll, rocket.y + TILE_SIZE_PIXELS, tile, flags);
+        else
+            update_sprite(rocket.sprite_index, rocket.x +TILE_SIZE_PIXELS - x_scroll, rocket.y + TILE_SIZE_PIXELS, tile, flags);
+    }
+    render_sprites();
 }
 
 void game_handle_input(uint8_t input, bool pressed)
 {
     if(input == INPUT_A && pressed)
         game_reset();
-    if(input == INPUT_LEFT && pressed)
+    if(input == INPUT_L && pressed)
     {
         if(x_scroll_target >= 8)
             x_scroll_target-=8;
     }
-    if(input == INPUT_RIGHT && pressed)
+    if(input == INPUT_R && pressed)
     {
         if(x_scroll_target <= (MAP_WIDTH-SCREEN_WIDTH)*TILE_SIZE_PIXELS-8)
             x_scroll_target+=8;
+    }
+    if(input == INPUT_UP && pressed)
+    {
+        if(pillbox[0].angle < 90)
+            pillbox[0].angle+=5;
+    } else if(input == INPUT_DOWN && pressed)
+    {
+        if(pillbox[0].angle > 0)
+            pillbox[0].angle-=5;
+    } else if(input == INPUT_LEFT && pressed)
+    {
+        if(pillbox[0].power > 0)
+            pillbox[0].power-=5;
+    } else if(input == INPUT_RIGHT && pressed)
+    {
+        if(pillbox[0].power < 100)
+            pillbox[0].power+=5;
+    } else if(input == INPUT_B && pressed)
+    {
+        if(!rocket.active)
+            launch_rocket(pillbox[0].angle, pillbox[0].power);
     }
 }
