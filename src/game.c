@@ -7,8 +7,12 @@
 
 #include "game.h"
 
-#define MAP_WIDTH 40        // In tiles
+#define SCREEN_WIDTH 40
+#define SCREEN_HEIGHT 30
+#define MAP_WIDTH 80        // In tiles
 #define MAP_HEIGHT 30       // In tiles
+#define TILE_SIZE_PIXELS 16
+#define HALF_TILE_PIXELS (TILE_SIZE_PIXELS / 2)
 
 uint16_t seed;
 
@@ -17,7 +21,7 @@ struct Pillbox
     uint8_t x,y; // in tiles
 } pillbox[2];
 
-uint8_t elevation[MAP_WIDTH];
+uint16_t elevation_pixels[MAP_WIDTH + 1];
 
 // Map 0 is the ground, clouds and white text on blue background
 uint8_t map0[MAP_WIDTH*MAP_HEIGHT];
@@ -47,8 +51,8 @@ enum TerrainType {
     TERRAIN_L3R0 = 10,
     TERRAIN_L0R3 = 11,
 
-    TERRAIN_L3R3_E = 12, // Pairs well with TERRAIN_L3R0
-    TERRAIN_L3R3_O = 13, // Pairs well with TERRAIN_L0R3
+    TERRAIN_L3R3_E = 12, // Pairs well with TERRAIN_L3R0, match with TERRAIN_L1R1_E_G
+    TERRAIN_L3R3_O = 13, // Pairs well with TERRAIN_L0R3, match with TERRAIN_L1R1_O_G
 
     // Ground variants for versions with no sky, expecting ground above
     TERRAIN_L1R1_E_G = 14,  // horizontal terrain, ground at top for even columns
@@ -154,6 +158,34 @@ const struct Terrain1x2 {
 
 };
 
+static const int8_t terrain_left_half[TERRAIN_L1R1_E_G] = {
+    1, 1, 1, 2, 3, 2, 1, 3, 1, 0, 3, 0, 3, 3
+};
+static const int8_t terrain_right_half[TERRAIN_L1R1_E_G] = {
+    1, 1, 2, 3, 2, 1, 3, 1, 0, 1, 0, 3, 3, 3
+};
+
+static int find_surface_type(uint16_t left_pixels, uint16_t right_pixels,
+                             int *top_row)
+{
+    int left_half = left_pixels / HALF_TILE_PIXELS;
+    int right_half = right_pixels / HALF_TILE_PIXELS;
+
+    for(int type = 0; type < TERRAIN_L1R1_E_G; type++)
+    {
+        int left_offset = left_half - terrain_left_half[type];
+        int right_offset = right_half - terrain_right_half[type];
+        if(left_offset == right_offset && left_offset >= 0 &&
+           (left_offset & 1) == 0)
+        {
+            *top_row = left_offset / 2;
+            if(*top_row + 1 < MAP_HEIGHT)
+                return type;
+        }
+    }
+    return -1;
+}
+
 void game_init(void)
 {
     show_map_xy("PRESS SPACE TO START", 21, 1, 10, 25);
@@ -172,64 +204,111 @@ void generate_terrain(void)
     memset(map0, TILE_SKY, MAP_WIDTH*MAP_HEIGHT);
     memset(map1, TILE_EMPTY, MAP_WIDTH*MAP_HEIGHT);
 
-    int anchor_x[5] = {0, MAP_WIDTH / 5, MAP_WIDTH / 2,
-                        (MAP_WIDTH * 4) / 5, MAP_WIDTH - 1};
-    int anchor_y[5];
-    anchor_y[0] = MAP_HEIGHT * 2 / 3 + rand() % 5 - 2;
-    anchor_y[2] = MAP_HEIGHT / 2 + rand() % (MAP_HEIGHT / 3 + 1);
-    anchor_y[4] = MAP_HEIGHT * 2 / 3 + rand() % 5 - 2;
-    anchor_y[1] = anchor_y[0] +
-                  (anchor_y[2] - anchor_y[0]) * anchor_x[1] / anchor_x[2];
-    anchor_y[3] = anchor_y[2] +
-                  (anchor_y[4] - anchor_y[2]) *
-                  (anchor_x[3] - anchor_x[2]) /
-                  (anchor_x[4] - anchor_x[2]);
+    enum LandmarkType {
+        LANDMARK_VALLEY,
+        LANDMARK_MOUNTAIN,
+        LANDMARK_CLIFF
+    };
+    int landmarks[5] = {
+        LANDMARK_VALLEY, LANDMARK_VALLEY,
+        LANDMARK_MOUNTAIN, LANDMARK_MOUNTAIN, LANDMARK_CLIFF
+    };
+    int baseline_pixels = (MAP_HEIGHT * 2 / 3) * TILE_SIZE_PIXELS +
+                          HALF_TILE_PIXELS;
+    int current_baseline = baseline_pixels;
+    int total_feature_width = 0;
+    int gap_index = 0;
+    int feature_x = 0;
 
-    for(int segment = 0; segment < 4; segment++)
+    for(int i = 4; i > 0; i--)
     {
-        int start_x = anchor_x[segment];
-        int end_x = anchor_x[segment + 1];
-        int start_y = anchor_y[segment];
-        int end_y = anchor_y[segment + 1];
-        for(int x = start_x; x <= end_x; x++)
+        int swap = rand() % (i + 1);
+        int landmark = landmarks[i];
+        landmarks[i] = landmarks[swap];
+        landmarks[swap] = landmark;
+    }
+
+    for(int i = 0; i < 5; i++)
+    {
+        int height_pixels = landmarks[i] == LANDMARK_CLIFF ?
+                            2 * TILE_SIZE_PIXELS : 5 * TILE_SIZE_PIXELS;
+        int ramp_columns = height_pixels / (2 * HALF_TILE_PIXELS);
+        total_feature_width += landmarks[i] == LANDMARK_CLIFF ?
+                               ramp_columns : 2 * ramp_columns;
+    }
+
+    int gap = (MAP_WIDTH - total_feature_width) / 6;
+    int extra_gaps = (MAP_WIDTH - total_feature_width) % 6;
+    for(int x = 0; x <= MAP_WIDTH; x++)
+        elevation_pixels[x] = baseline_pixels;
+
+    for(int i = 0; i < 5; i++)
+    {
+        feature_x += gap + (gap_index < extra_gaps);
+        gap_index++;
+
+        int height_pixels = landmarks[i] == LANDMARK_CLIFF ?
+                            2 * TILE_SIZE_PIXELS : 5 * TILE_SIZE_PIXELS;
+        int ramp_columns = height_pixels / (2 * HALF_TILE_PIXELS);
+        int direction = landmarks[i] == LANDMARK_MOUNTAIN ? -1 : 1;
+        int is_cliff = landmarks[i] == LANDMARK_CLIFF;
+
+        for(int step = 1; step <= ramp_columns; step++)
         {
-            elevation[x] = start_y + (end_y - start_y) * (x - start_x) /
-                           (end_x - start_x);
+            elevation_pixels[feature_x + step] = current_baseline +
+                direction * step * 2 * HALF_TILE_PIXELS;
+        }
+
+        if(is_cliff)
+        {
+            current_baseline += height_pixels;
+            for(int x = feature_x + ramp_columns; x <= MAP_WIDTH; x++)
+                elevation_pixels[x] = current_baseline;
+            feature_x += ramp_columns;
+        }
+        else
+        {
+            int peak_or_floor = current_baseline + direction * height_pixels;
+            for(int step = 1; step <= ramp_columns; step++)
+            {
+                elevation_pixels[feature_x + ramp_columns + step] =
+                    peak_or_floor - direction * step * 2 * HALF_TILE_PIXELS;
+            }
+            feature_x += 2 * ramp_columns;
+        }
+
+        if(i < 4)
+        {
+            feature_x += gap + (gap_index < extra_gaps);
+            gap_index++;
         }
     }
 
     for(int x = 0; x < MAP_WIDTH; x++)
     {
-        int surface = elevation[x];
-        int incoming_slope = x > 0 ? surface - elevation[x - 1] : 0;
-        int outgoing_slope = x + 1 < MAP_WIDTH ?
-                             elevation[x + 1] - surface : 0;
-        enum TerrainType surface_type;
+        int top_row;
+        int surface_type = find_surface_type(elevation_pixels[x],
+                                             elevation_pixels[x + 1],
+                                             &top_row);
+        if(surface_type < 0)
+        {
+            debug_logf("No terrain tile for x=%d, edges=%u,%u", x,
+                       elevation_pixels[x], elevation_pixels[x + 1]);
+            continue;
+        }
+        if(surface_type == TERRAIN_L1R1_E && (x & 1))
+            surface_type = TERRAIN_L1R1_O;
 
-        if(outgoing_slope > 0)
-            surface_type = TERRAIN_L1R3;
-        else if(outgoing_slope < 0)
-            surface_type = TERRAIN_L3R1;
-        else
-            surface_type = x & 1 ? TERRAIN_L1R1_O : TERRAIN_L1R1_E;
-        debug_logf("x=%d, surface=%d, incoming_slope=%d, outgoing_slope=%d, surface_type=%d",
-                   x, surface, incoming_slope, outgoing_slope, surface_type);
+        debug_logf("x=%d, edges_px=%u,%u, surface_type=%d", x,
+                   elevation_pixels[x], elevation_pixels[x + 1], surface_type);
+        map0[top_row * MAP_WIDTH + x] = terrain1x2[surface_type].tiles[0];
+        map0[(top_row + 1) * MAP_WIDTH + x] =
+            terrain1x2[surface_type].tiles[1];
 
-        // Label terrain for debug purposes
-        map0[x + (surface-3) * MAP_WIDTH] = '0'+(x/10);
-        map0[x + (surface-2) * MAP_WIDTH] = '0'+(x%10);
-        map0[x + (surface-5) * MAP_WIDTH] = '0' + surface_type;
-
-        int top_y = surface > 0 ? surface - 1 : 0;
-        if(top_y + 1 >= MAP_HEIGHT)
-            top_y = MAP_HEIGHT - 2;
-        map0[top_y * MAP_WIDTH + x] = terrain1x2[surface_type].tiles[0];
-        map0[(top_y + 1) * MAP_WIDTH + x] = terrain1x2[surface_type].tiles[1];
-
-        enum TerrainType ground_type = surface_type +
-                          (TERRAIN_L1R1_E_G - TERRAIN_L1R1_E);
-
-        for(int y = top_y + 2; y < MAP_HEIGHT; y += 2)
+        int ground_type = surface_type <= TERRAIN_L0R3 ?
+            surface_type + (TERRAIN_L1R1_E_G - TERRAIN_L1R1_E) :
+            (x & 1 ? TERRAIN_L1R1_O_G : TERRAIN_L1R1_E_G);
+        for(int y = top_row + 2; y < MAP_HEIGHT; y += 2)
         {
             map0[y * MAP_WIDTH + x] = terrain1x2[ground_type].tiles[0];
             if(y + 1 < MAP_HEIGHT)
@@ -244,9 +323,10 @@ void generate_terrain(void)
     for(int cloud = 0; cloud < 7; cloud++)
     {
         int x = (rand() % (MAP_WIDTH / 2)) * 2;
-        int surface = elevation[x] < elevation[x + 1] ?
-                      elevation[x] : elevation[x + 1];
-        int max_y = surface - 3;
+        int surface_pixels = elevation_pixels[x] < elevation_pixels[x + 1] ?
+                     elevation_pixels[x] : elevation_pixels[x + 1];
+        int surface_row = surface_pixels / TILE_SIZE_PIXELS;
+        int max_y = surface_row - 3;
         if(max_y > 14)
             max_y = 14;
         if(max_y < 2)
@@ -272,7 +352,9 @@ void generate_terrain(void)
     {
         if(rand() % 20 == 0) // 5% chance of a tree
         {
-            int y = elevation[x] - 1;
+            int surface_row = (elevation_pixels[x] + TILE_SIZE_PIXELS - 1) /
+                              TILE_SIZE_PIXELS;
+            int y = surface_row - 1;
             if(y > 0)
             {
                 uint8_t tile = rand() % 2 == 0 ? TILE_TREE1_1x2 : TILE_TREE2_1x2;
@@ -292,7 +374,8 @@ void place_pillboxes(void)
     {
         int x = rand() % (MAP_WIDTH/4-1);
         if(i == 1) x += 3 * MAP_WIDTH / 4;
-        int y = elevation[x];
+        int y = (elevation_pixels[x] + TILE_SIZE_PIXELS - 1) /
+            TILE_SIZE_PIXELS;
         if(y > 0)
         {
             uint8_t tile = TILE_PILLBOX+(i*6);
