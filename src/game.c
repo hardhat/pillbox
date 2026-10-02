@@ -24,54 +24,134 @@ uint8_t map0[MAP_WIDTH*MAP_HEIGHT];
 // Map 1 is the features like trees, rocks, bushes, and after explosions, holes
 uint8_t map1[MAP_WIDTH*MAP_HEIGHT];
 
-// These 2x2 tiles are used to connect a continious terrain seamlessly
+// These 1x2 tiles are used to connect a continious terrain seamlessly
+// Each terrain is measured on the left and right in half tiles, so since the terrain is 1x2, 
+// they are measured in half tiles on the left and right sides denoted: 
+// L[0-4]R[0-4] where 0 is the top, 2 is the middle, and 4 is the bottom. (half-tile measurements)
 enum TerrainType {
-    TERRAIN_ACROSS, // horizontal terrain, sky at top
-    TERRAIN_LEFT_HIGH_RIGHT_LOW,    // middle of the left top tile to middle of right bottom tile, sky at top
-    TERRAIN_LEFT_LOW_RIGHT_HIGH,    // middle of the left bottom tile to middle of right top tile, sky at top
-    TERRAIN_VALLEY, // High left and right, but low in the middle, sky at top
-    TERRAIN_PEAK, // Low left and right, but high in the middle, sky at top
-    TERRAIN_ACROSS_GROUND,  // horizontal terrain, ground at top
-    TERRAIN_LEFT_LOW_RIGHT_HIGH_GROUND, // low left and high right, with terrain above
-    TERRAIN_LEFT_HIGH_RIGHT_LOW_GROUND, // high left and low right, with terrain above
+    TERRAIN_L1R1_E = 0, // horizontal terrain, sky at top for even columns
+    TERRAIN_L1R1_O = 1, // horizontal terrain, sky at top for odd columns
+    
+    TERRAIN_L1R2 = 2,
+    TERRAIN_L2R3 = 3,
+    
+    TERRAIN_L3R2 = 4,
+    TERRAIN_L2R1 = 5,
+
+    TERRAIN_L1R3 = 6,
+    TERRAIN_L3R1 = 7,
+
+    TERRAIN_L1R0 = 8,
+    TERRAIN_L0R1 = 9,
+
+    TERRAIN_L3R0 = 10,
+    TERRAIN_L0R3 = 11,
+
+    TERRAIN_L3R3_E = 12, // Pairs well with TERRAIN_L3R0
+    TERRAIN_L3R3_O = 13, // Pairs well with TERRAIN_L0R3
+
+    // Ground variants for versions with no sky, expecting ground above
+    TERRAIN_L1R1_E_G = 14,  // horizontal terrain, ground at top for even columns
+    TERRAIN_L1R1_O_G = 15,   // horizontal terrain, ground at top for odd columns
+
+    TERRAIN_L1R2_G = 16, // horizontal terrain, ground at top
+    TERRAIN_L2R3_G = 17,
+    TERRAIN_L3R2_G = 18,
+    TERRAIN_L2R1_G = 19,
+    TERRAIN_L1R3_G = 20,
+    TERRAIN_L3R1_G = 21,
+    TERRAIN_L1R0_G = 22,
+    TERRAIN_L0R1_G = 23,
+    TERRAIN_L3R0_G = 24,
+    TERRAIN_L0R3_G = 25,
+    
     TERRAIN_TYPE_COUNT
 };
 
-const struct Terrain2x2 {
-    uint8_t tiles[2][2]; // 2x2 terrain tile pattern
-} terrain2x2[TERRAIN_TYPE_COUNT] = {
-    { //TERRAIN_ACROSS
-        {{TILE_GND_PATH_LG_2x2, TILE_GND_PATH_LG_2x2 + 1},
-        {TILE_GND_PATH_LG_2x2 + 0x10, TILE_GND_PATH_LG_2x2 + 0x11}}
+const struct Terrain1x2 {
+    uint8_t tiles[2]; // 2x2 terrain tile pattern
+} terrain1x2[TERRAIN_TYPE_COUNT] = {
+    { //TERRAIN_L1R1_E = 0
+        {TILE_GND_PATH_LG_2x2, TILE_GND_PATH_LG_2x2 + 0x10}
     },
-    { //TERRAIN_LEFT_LOW_RIGHT_HIGH
-        {{0x66, TILE_EMPTY},
-        {0x76, 0x67}}
+    { //TERRAIN_L1R1_O = 1
+        {TILE_GND_PATH_LG_2x2 + 0x1, TILE_GND_PATH_LG_2x2 + 0x11}
     },
-    { //TERRAIN_LEFT_HIGH_RIGHT_LOW
-        {{TILE_EMPTY, 0x69},
-        {0x68, 0x79}}
+    { //TERRAIN_L1R2 = 2
+        {0x66, 0x76}
     },
-    { //TERRAIN_VALLEY
-        {{TILE_GND_VALLEY_TOP_2x1, TILE_GND_VALLEY_TOP_2x1 + 1},
-        {TILE_GND_VALLEY_BOTTOM_MD_SKY_2x1, TILE_GND_VALLEY_BOTTOM_MD_SKY_2x1 + 1}}
+    { //TERRAIN_L2R3 = 3
+        {TILE_EMPTY, 0x67}
     },
-    { //TERRAIN_PEAK
-        {{TILE_GND_ML_MR_LG, TILE_GND_ML_MR_LG + 1},
-        {TILE_GND_ML_MR_LG + 0x10, TILE_GND_ML_MR_LG + 0x11}}
+    { //TERRAIN_L3R2 = 4
+        {TILE_EMPTY, 0x68}
     },
-    { //TERRAIN_ACROSS_GROUND
-        {{0x82, 0x83},
-        {0x7A, 0x7B}}
+    { //TERRAIN_L2R1 = 5
+        {0x69, 0x79}
     },
-    { //TERRAIN_LEFT_LOW_RIGHT_HIGH_GROUND
-        {{0x76, 0x77},
-        {0x82, 0x83}}
+    { //TERRAIN_L1R3 = 6
+        {0x64, 0x84}
     },
-    { //TERRAIN_LEFT_HIGH_RIGHT_LOW_GROUND
-        {{0x78, 0x79},
-        {0x82, 0x83}}
+    { //TERRAIN_L3R1 = 7
+        {0x65, 0x85}
+    },
+    { //TERRAIN_L1R0 = 8
+        {0x62, 0x72}
+    },
+    { //TERRAIN_L0R1 = 9
+        {0x63, 0x73}
+    },
+    { // TERRAIN_L3R0 = 10
+        {0x0D, 0x1D}
+    },
+    { //TERRAIN_L0R3 = 11
+        {0x0E, 0x1E}
+    },
+    { //TERRAIN_L3R3_E = 12 pairs well with TERRAIN_L3R0
+        {0x0C, 0x1C}
+    },
+    { //TERRAIN_L3R3_O = 13
+        {0x0F, 0x1F}
+    },
+
+    { //TERRAIN_L1R1_E_G = 14
+        {0x82, 0x7A},
+    },
+    { // TERRAIN_L1R1_O_G = 15
+        {0x83, 0x7B}
+    },
+    { //TERRAIN_L1R2_G = 16
+        {0x76, 0x82},
+    },
+    { //TERRAIN_L2R3_G = 17
+        {0x77, 0x83}
+    },
+    { //TERRAIN_L3R2_G = 18
+        {0x78, 0x82},
+    },
+    { //TERRAIN_L2R1_G = 19
+        {0x79, 0x83},
+    },
+    { //TERRAIN_L1R3_G = 20
+        {0x77, 0x82},
+    },
+    // TODO: check tile numbers from here to the bottom
+    { //TERRAIN_L3R1_G = 21
+        {0x78, 0x83},
+    },
+    { //TERRAIN_L1R0_G = 22
+        {0x76, 0x82},
+    },
+    { //TERRAIN_L0R1_G = 23
+        {0x79, 0x83},
+    },
+    { //TERRAIN_L3R0_G = 24
+        {0x76, 0x82},
+    },
+    { //TERRAIN_L0R3_G = 25
+        {0x79, 0x83},
     }
+
 };
 
 void game_init(void)
@@ -80,12 +160,10 @@ void game_init(void)
 
     for(int i=0; i<TERRAIN_TYPE_COUNT; i++)
     {
-        const uint8_t tiles[4] = {
-            terrain2x2[i].tiles[0][0], terrain2x2[i].tiles[0][1], 
-            terrain2x2[i].tiles[1][0], terrain2x2[i].tiles[1][1]
+        const uint8_t tiles[2] = {
+            terrain1x2[i].tiles[0], terrain1x2[i].tiles[1]
         };
-        // Show the terrain type for debugging or visualization purposes
-        show_map_xy(tiles, 2, 2, 20-(TERRAIN_TYPE_COUNT*3)/2+3*i, 1);
+        show_map_xy(tiles, 1, 2, (MAP_WIDTH - TERRAIN_TYPE_COUNT) / 2 + i, 1);
     }
 }
 
@@ -120,71 +198,43 @@ void generate_terrain(void)
         }
     }
 
-    for(int x = 0; x < MAP_WIDTH; x += 2)
+    for(int x = 0; x < MAP_WIDTH; x++)
     {
-        int left_surface = elevation[x];
-        int right_surface = elevation[x + 1];
-        int min_surface = left_surface < right_surface ?
-                          left_surface : right_surface;
-        int max_surface = left_surface > right_surface ?
-                          left_surface : right_surface;
-        int left_slope = x >= 1 ? left_surface - elevation[x - 1] : 0;
-        int right_slope = x + 2 < MAP_WIDTH ?
-                  elevation[x + 2] - right_surface : 0;
+        int surface = elevation[x];
+        int incoming_slope = x > 0 ? surface - elevation[x - 1] : 0;
+        int outgoing_slope = x + 1 < MAP_WIDTH ?
+                             elevation[x + 1] - surface : 0;
         enum TerrainType surface_type;
 
-        map0[x + (min_surface-3) * MAP_WIDTH] = '0'+(x/10);
-        map0[x + (min_surface-2) * MAP_WIDTH] = '0'+(x%10);
-
-        if(left_slope > 0 && right_slope < 0)
-            surface_type = TERRAIN_VALLEY;
-        else if(left_slope < 0 && right_slope > 0)
-            surface_type = TERRAIN_PEAK;
-        else if(left_surface > right_surface)
-            surface_type = TERRAIN_LEFT_LOW_RIGHT_HIGH;
-        else if(left_surface < right_surface)
-            surface_type = TERRAIN_LEFT_HIGH_RIGHT_LOW;
-        else if(right_slope > 0) // || left_slope < 0)
-            surface_type = TERRAIN_LEFT_LOW_RIGHT_HIGH;
-        else if(right_slope < 0) // || left_slope > 0)
-            surface_type = TERRAIN_LEFT_HIGH_RIGHT_LOW;
+        if(outgoing_slope > 0)
+            surface_type = TERRAIN_L1R3;
+        else if(outgoing_slope < 0)
+            surface_type = TERRAIN_L3R1;
         else
-            surface_type = TERRAIN_ACROSS;
-        debug_logf("x=%d, left_surface=%d, right_surface=%d, min_surface=%d, max_surface=%d, left_slope=%d, right_slope=%d, surface_type=%d",
-                   x, left_surface, right_surface, min_surface, max_surface, left_slope, right_slope, surface_type);
+            surface_type = x & 1 ? TERRAIN_L1R1_O : TERRAIN_L1R1_E;
+        debug_logf("x=%d, surface=%d, incoming_slope=%d, outgoing_slope=%d, surface_type=%d",
+                   x, surface, incoming_slope, outgoing_slope, surface_type);
 
-        for(int y = 0; y < MAP_HEIGHT; y += 2)
+        // Label terrain for debug purposes
+        map0[x + (surface-3) * MAP_WIDTH] = '0'+(x/10);
+        map0[x + (surface-2) * MAP_WIDTH] = '0'+(x%10);
+        map0[x + (surface-5) * MAP_WIDTH] = '0' + surface_type;
+
+        int top_y = surface > 0 ? surface - 1 : 0;
+        if(top_y + 1 >= MAP_HEIGHT)
+            top_y = MAP_HEIGHT - 2;
+        map0[top_y * MAP_WIDTH + x] = terrain1x2[surface_type].tiles[0];
+        map0[(top_y + 1) * MAP_WIDTH + x] = terrain1x2[surface_type].tiles[1];
+
+        enum TerrainType ground_type = surface_type +
+                          (TERRAIN_L1R1_E_G - TERRAIN_L1R1_E);
+
+        for(int y = top_y + 2; y < MAP_HEIGHT; y += 2)
         {
-            if(y + 1 < min_surface)
-                continue;
-
-            enum TerrainType terrain_type = surface_type;
-            int sloped_surface = surface_type == TERRAIN_LEFT_LOW_RIGHT_HIGH ||
-                                 surface_type == TERRAIN_LEFT_HIGH_RIGHT_LOW;
-            if(y > max_surface || (sloped_surface && y == max_surface))
-            {
-                switch(surface_type)
-                {
-                    case TERRAIN_LEFT_LOW_RIGHT_HIGH:
-                        terrain_type = TERRAIN_LEFT_LOW_RIGHT_HIGH_GROUND;
-                        break;
-                    case TERRAIN_LEFT_HIGH_RIGHT_LOW:
-                        terrain_type = TERRAIN_LEFT_HIGH_RIGHT_LOW_GROUND;
-                        break;
-                    default:
-                        terrain_type = TERRAIN_ACROSS_GROUND;
-                        break;
-                }
-            }
-
-            for(int row = 0; row < 2; row++)
-            {
-                for(int column = 0; column < 2; column++)
-                {
-                    map0[(y + row) * MAP_WIDTH + x + column] =
-                        terrain2x2[terrain_type].tiles[row][column];
-                }
-            }
+            map0[y * MAP_WIDTH + x] = terrain1x2[ground_type].tiles[0];
+            if(y + 1 < MAP_HEIGHT)
+                map0[(y + 1) * MAP_WIDTH + x] =
+                    terrain1x2[ground_type].tiles[1];
         }
     }
 
