@@ -36,15 +36,37 @@ struct Pillbox
     uint8_t angle,power; // Angle in degrees, power in percent (max 100)
 } pillbox[2];
 
+// 1 pixel = 100 mm and the game runs at 60 frames per second.
+// Sub-pixel values are Q16.16 fixed point (1/65536 pixel units).
 struct Rocket
 {
     uint8_t angle,power; // Angle in degrees, power in percent (max 100)
-    int16_t x,y; // Position in pixels
-    int16_t vx,vy; // Velocity in pixels per frame
-    int16_t ax,ay; // Acceleration in pixels per frame squared
+    int16_t x,y; // Whole pixel position
+    uint16_t fx,fy; // Fractional pixel position, in 1/65536 pixel
+    int32_t vx,vy; // Velocity in 1/65536 pixel per frame
+    int32_t ax,ay; // Acceleration in 1/65536 pixel per frame squared
     bool active; // Whether the rocket is currently active (1) or not (0)
     uint8_t sprite_index;
 } rocket;
+
+#define ROCKET_SPEED_PER_PERCENT 4369 // 40 m/s at 100% power
+#define GRAVITY_Q16 1786              // 9.81 m/s^2
+#define WIND_KMH_Q16 3034             // 1 km/h
+#define DRAG_SHIFT 10                 // Drag is (air velocity - rocket velocity) / 1024 per frame
+
+// sin(degrees) in Q15 for 0..90 degrees
+static const uint16_t sin_q15[91] = {
+    0, 572, 1144, 1715, 2286, 2856, 3425, 3993, 4560, 5126,
+    5690, 6252, 6813, 7371, 7927, 8481, 9032, 9580, 10126, 10668,
+    11207, 11743, 12275, 12803, 13328, 13848, 14365, 14876, 15384, 15886,
+    16384, 16877, 17364, 17847, 18324, 18795, 19261, 19720, 20174, 20622,
+    21063, 21498, 21926, 22348, 22763, 23170, 23571, 23965, 24351, 24730,
+    25102, 25466, 25822, 26170, 26510, 26842, 27166, 27482, 27789, 28088,
+    28378, 28660, 28932, 29197, 29452, 29698, 29935, 30163, 30382, 30592,
+    30792, 30983, 31164, 31336, 31499, 31651, 31795, 31928, 32052, 32166,
+    32270, 32365, 32449, 32524, 32588, 32643, 32688, 32723, 32748, 32763,
+    32768
+};
 
 uint16_t elevation_pixels[MAP_WIDTH + 1];
 
@@ -450,16 +472,37 @@ void place_pillboxes(void)
 
 void launch_rocket(uint8_t angle, uint8_t power)
 {
+    if(angle > 90)
+        angle = 90;
+    if(power > 100)
+        power = 100;
+
     rocket.active = true;
     rocket.angle = angle;
     rocket.power = power;
-    rocket.x = pillbox[0].x * TILE_SIZE_PIXELS;
-    rocket.y = (elevation_pixels[pillbox[0].x] + TILE_SIZE_PIXELS - 1);
-    rocket.vx = 0;
-    rocket.vy = 0;
+    rocket.x = pillbox[0].x * TILE_SIZE_PIXELS + TILE_SIZE_PIXELS;
+    rocket.y = (pillbox[0].y - 1) * TILE_SIZE_PIXELS;
+    rocket.fx = 0;
+    rocket.fy = 0;
+
+    // power * sin is at most 100 * 32768 >> 5, so the speed scaling stays within 32 bits
+    int32_t horizontal = ((int32_t)power * sin_q15[90 - angle]) >> 5;
+    int32_t vertical = ((int32_t)power * sin_q15[angle]) >> 5;
+    rocket.vx = (horizontal * ROCKET_SPEED_PER_PERCENT) >> 10;
+    rocket.vy = -((vertical * ROCKET_SPEED_PER_PERCENT) >> 10); // Screen y grows downward
     rocket.ax = 0;
     rocket.ay = 0;
     rocket.sprite_index = 0;
+}
+
+static int16_t ground_pixels(int16_t x)
+{
+    int16_t column = x / TILE_SIZE_PIXELS;
+    int16_t offset = x % TILE_SIZE_PIXELS;
+    int16_t left = elevation_pixels[column];
+    int16_t right = elevation_pixels[column + 1];
+
+    return left + (right - left) * offset / TILE_SIZE_PIXELS;
 }
 
 void update_rocket(void)
@@ -467,10 +510,27 @@ void update_rocket(void)
     if(!rocket.active)
         return;
 
+    // Drag acts on velocity relative to the moving air, so wind pushes the rocket
+    int32_t wind_vx = (int32_t)wind * WIND_KMH_Q16;
+    rocket.ax = (wind_vx - rocket.vx) >> DRAG_SHIFT;
+    rocket.ay = GRAVITY_Q16 - (rocket.vy >> DRAG_SHIFT);
+
     rocket.vx += rocket.ax;
     rocket.vy += rocket.ay;
-    rocket.x += rocket.vx;
-    rocket.y += rocket.vy;
+
+    int32_t sum = (int32_t)rocket.fx + rocket.vx;
+    rocket.x += (int16_t)(sum >> 16);
+    rocket.fx = (uint16_t)(sum & 0xFFFF);
+
+    sum = (int32_t)rocket.fy + rocket.vy;
+    rocket.y += (int16_t)(sum >> 16);
+    rocket.fy = (uint16_t)(sum & 0xFFFF);
+
+    if(rocket.x < 0 || rocket.x >= MAP_WIDTH * TILE_SIZE_PIXELS ||
+       rocket.y >= MAP_HEIGHT * TILE_SIZE_PIXELS)
+        rocket.active = false;
+    else if(rocket.vy > 0 && rocket.y >= ground_pixels(rocket.x))
+        rocket.active = false;
 }
 
 void sprite_print(int16_t x, int16_t y, const char *str)
@@ -502,6 +562,8 @@ void game_update(uint16_t delta)
 
     char buffer[16];
     reset_sprite();
+    sprintf(buffer, "WIND %3d", wind);
+    sprite_print(15*TILE_SIZE_PIXELS,0*TILE_SIZE_PIXELS, buffer);
     sprite_print(2*TILE_SIZE_PIXELS,3*TILE_SIZE_PIXELS, "POWER ");
     sprintf(buffer, "%3d", pillbox[0].power);
     sprite_print(8*TILE_SIZE_PIXELS,3*TILE_SIZE_PIXELS, buffer);
@@ -524,12 +586,15 @@ void game_reset(void)
     rocket.active = false;
     rocket.x = 0;
     rocket.y = 0;
+    rocket.fx = 0;
+    rocket.fy = 0;
     rocket.vx = 0;
     rocket.vy = 0;
     rocket.ax = 0;
     rocket.ay = 0;
     rocket.sprite_index = 0;
     clear_sprites();
+    wind = (rand() % 61) - 30; // Wind can be between -30 and +30 km/h
     x_scroll = 0;
     x_scroll_target = 0;
     zvb_ctrl_l0_scr_x_low = x_scroll & 0xFF;
@@ -547,8 +612,21 @@ void game_render(void)
 
     if(rocket.active)
     {
-        uint8_t tile = 0; // Replace with the actual tile index for the rocket sprite
-        uint8_t flags = 0; // Replace with the actual flags for the rocket sprite
+        // Pick the sprite from the heading in 45 degree sectors; the art points up, up-right and right
+        int32_t speed_x = rocket.vx < 0 ? -rocket.vx : rocket.vx;
+        int32_t speed_y = rocket.vy < 0 ? -rocket.vy : rocket.vy;
+        uint8_t tile = TILE_SHELL_UP_RIGHT;
+        uint8_t flags = 0;
+        if(speed_y * 5 < speed_x * 2)
+            tile = TILE_SHELL_RIGHT;
+        else if(speed_x * 5 < speed_y * 2)
+            tile = TILE_SHELL_UP;
+        if(tile != TILE_SHELL_UP && rocket.vx < 0)
+            flags |= SPRITE_FLAG_FLIP_X;
+        if(tile != TILE_SHELL_RIGHT && rocket.vy > 0)
+            flags |= SPRITE_FLAG_FLIP_Y;
+
+
         // Render the rocket sprite at its current position
         if(rocket.sprite_index == 0)
             rocket.sprite_index = add_sprite(rocket.x +TILE_SIZE_PIXELS - x_scroll, rocket.y + TILE_SIZE_PIXELS, tile, flags);
