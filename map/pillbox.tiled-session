@@ -1,0 +1,47 @@
+{
+    "activeFile": "base.tmx",
+    "expandedProjectPaths": [
+    ],
+    "fileStates": {
+        "base.tmx": {
+            "scale": 1.153359375,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 325.5706834654203,
+                "y": 251.0058931111563
+            }
+        },
+        "pillbox-bg.tsx": {
+            "scaleInDock": 5.5,
+            "scaleInEditor": 4
+        },
+        "pillbox-sprites.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        }
+    },
+    "last.imagePath": "C:/Users/dalewick/OneDrive/Documents/GitHub/zeal/pillbox/img",
+    "map.height": 30,
+    "map.lastUsedFormat": "tmx",
+    "map.tileHeight": 16,
+    "map.tileWidth": 16,
+    "map.width": 40,
+    "openFiles": [
+        "pillbox-sprites.tsx",
+        "pillbox-bg.tsx",
+        "base.tmx"
+    ],
+    "project": "untitled.tiled-project",
+    "recentFiles": [
+        "pillbox-sprites.tsx",
+        "pillbox-bg.tsx",
+        "base.tmx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 16,
+        "width": 16
+    },
+    "tileset.transparentColor": "#00ffff",
+    "tileset.useTransparentColor": false
+}
