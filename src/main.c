@@ -23,7 +23,7 @@
 #define __at(addr)
 #define __naked
 #define __sfr
-#define va_list struct {int dummy; }
+#define va_list char * //struct {int dummy; }
 #define va_start(ap, last)
 #define va_end(ap)
 #endif
