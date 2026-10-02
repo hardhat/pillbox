@@ -271,7 +271,7 @@ static void perturb_terrain(void)
 
 void game_init(void)
 {
-    show_map_xy("PRESS SPACE TO START", 21, 1, 10, 25);
+    show_map_xy("PRESS ENTER TO START", 21, 1, 10, 25);
 
     for(int i=0; i<TERRAIN_TYPE_COUNT; i++)
     {
@@ -551,7 +551,7 @@ void game_update(uint16_t delta)
     {
         int16_t diff = x_scroll_target - x_scroll;
         uint16_t abs_diff = diff > 0 ? diff : -diff;
-        int16_t increment=3;
+        int16_t increment=6;
         if(abs_diff<increment)
             increment=abs_diff;
         if(x_scroll < x_scroll_target)
@@ -562,7 +562,7 @@ void game_update(uint16_t delta)
 
     char buffer[16];
     reset_sprite();
-    sprintf(buffer, "WIND %3d", wind);
+    sprintf(buffer, "WIND %c%3d", wind < 0 ? '-' : '+', wind < 0 ? -wind : wind);
     sprite_print(15*TILE_SIZE_PIXELS,0*TILE_SIZE_PIXELS, buffer);
     sprite_print(2*TILE_SIZE_PIXELS,3*TILE_SIZE_PIXELS, "POWER ");
     sprintf(buffer, "%3d", pillbox[0].power);
@@ -628,17 +628,17 @@ void game_render(void)
 
 
         // Render the rocket sprite at its current position
-        if(rocket.sprite_index == 0)
+       // if(rocket.sprite_index == 0)
             rocket.sprite_index = add_sprite(rocket.x +TILE_SIZE_PIXELS - x_scroll, rocket.y + TILE_SIZE_PIXELS, tile, flags);
-        else
-            update_sprite(rocket.sprite_index, rocket.x +TILE_SIZE_PIXELS - x_scroll, rocket.y + TILE_SIZE_PIXELS, tile, flags);
+        //else
+          //  update_sprite(rocket.sprite_index, rocket.x +TILE_SIZE_PIXELS - x_scroll, rocket.y + TILE_SIZE_PIXELS, tile, flags);
     }
     render_sprites();
 }
 
 void game_handle_input(uint8_t input, bool pressed)
 {
-    if(input == INPUT_A && pressed)
+    if(input == INPUT_START && pressed)
         game_reset();
     if(input == INPUT_L && pressed)
     {
@@ -666,7 +666,7 @@ void game_handle_input(uint8_t input, bool pressed)
     {
         if(pillbox[0].power < 100)
             pillbox[0].power+=5;
-    } else if(input == INPUT_B && pressed)
+    } else if(input == INPUT_A && pressed)
     {
         if(!rocket.active)
             launch_rocket(pillbox[0].angle, pillbox[0].power);
