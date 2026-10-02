@@ -60,13 +60,6 @@ enum INPUT
 #define TILE_TREE2_1x2 0x6D
 #define TILE_DUST_LG1_2x2 0x6E
 
-#define TILE_GND_TL_MR_SM_SKY 0x67  // Ground from top left to mid right, small (1x1), sky above
-#define TILE_GND_ML_TR_SM_SKY 0x68  // Ground from mid left to top right, small (1x1), sky above
-#define TILE_GND_TL_MR_SM 0x77 // Ground from top left to mid right, small (1x1), ground above
-#define TILE_GND_ML_TR_SM 0x78 // Ground from mid left to top right, small (1x1), ground above
-#define TILE_GND_ML_BR_SM_SKY 0x66 // Ground from mid left to bottom right, small (1x1), sky above
-#define TILE_GND_TL_MR_SM_GND 0x76 // Ground from top left to mid right, small (1x1), ground below
-#define TILE_GND_ML_TR_SM_GND 0x79 // Ground from mid left to top right, small (1x1), ground below
 #define TILE_GND_ML_MR_LG 0x62 // Ground from top mid left to top mid right, large (2x2)
 #define TILE_GND_VALLEY_TOP_2x1 0x64
 #define TILE_GND_VALLEY_BOTTOM_MD_2x1 0x74
