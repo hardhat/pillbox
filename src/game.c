@@ -195,7 +195,7 @@ void game_init(void)
         const uint8_t tiles[2] = {
             terrain1x2[i].tiles[0], terrain1x2[i].tiles[1]
         };
-        show_map_xy(tiles, 1, 2, (MAP_WIDTH - TERRAIN_TYPE_COUNT) / 2 + i, 1);
+        show_map_xy(tiles, 1, 2, (SCREEN_WIDTH - TERRAIN_TYPE_COUNT) / 2 + i, 1);
     }
 }
 
@@ -213,7 +213,7 @@ void generate_terrain(void)
         LANDMARK_VALLEY, LANDMARK_VALLEY,
         LANDMARK_MOUNTAIN, LANDMARK_MOUNTAIN, LANDMARK_CLIFF
     };
-    int baseline_pixels = (MAP_HEIGHT * 2 / 3) * TILE_SIZE_PIXELS +
+    int baseline_pixels = (MAP_HEIGHT / 2) * TILE_SIZE_PIXELS +
                           HALF_TILE_PIXELS;
     int current_baseline = baseline_pixels;
     int total_feature_width = 0;
@@ -277,12 +277,8 @@ void generate_terrain(void)
             feature_x += 2 * ramp_columns;
         }
 
-        if(i < 4)
-        {
-            feature_x += gap + (gap_index < extra_gaps);
-            gap_index++;
-        }
     }
+    feature_x += gap + (gap_index < extra_gaps);
 
     for(int x = 0; x < MAP_WIDTH; x++)
     {
