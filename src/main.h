@@ -96,7 +96,7 @@ void clear_sprites(void);
 /// @param tile The tile index of the sprite
 /// @param flags The flags for the sprite (e.g., priority, flip)
 /// @return The index of the added sprite, or 255 if the sprite table is full
-uint8_t add_sprite(uint16_t x, uint8_t y, uint8_t tile, uint16_t flags);
+uint8_t add_sprite(uint16_t x, uint16_t y, uint8_t tile, uint16_t flags);
 /// @brief Update an existing sprite in the off-screen sprites table
 /// @param index The index of the sprite to update
 /// @param x The new x-coordinate of the sprite
@@ -104,7 +104,7 @@ uint8_t add_sprite(uint16_t x, uint8_t y, uint8_t tile, uint16_t flags);
 /// @param tile The new tile index of the sprite
 /// @param flags The new flags for the sprite (e.g., priority, flip)
 /// @return The index of the updated sprite, or 255 if the index is invalid
-uint8_t update_sprite(uint8_t index, uint16_t x, uint8_t y, uint8_t tile, uint16_t flags);
+uint8_t update_sprite(uint8_t index, uint16_t x, uint16_t y, uint8_t tile, uint16_t flags);
 /// Show map on layer 0
 void show_map(uint8_t *map,uint8_t width,uint8_t height);
 /// Show map on layer 1

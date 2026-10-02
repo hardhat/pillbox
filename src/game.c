@@ -24,11 +24,14 @@
 #define MAP_HEIGHT 30       // In tiles
 #define TILE_SIZE_PIXELS 16
 #define HALF_TILE_PIXELS (TILE_SIZE_PIXELS / 2)
+#define SCROLL_SPEED 8
 
 uint16_t seed;
 int16_t x_scroll;
 int16_t x_scroll_target;
+int16_t x_scroll_speed;
 int16_t wind; // positive is wind blowing to the right, negative is wind blowing to the left, in km/h
+bool level_active;
 
 struct Pillbox
 {
@@ -271,6 +274,10 @@ static void perturb_terrain(void)
 
 void game_init(void)
 {
+    x_scroll_speed = 0;
+    x_scroll = 0;
+    x_scroll_target = 0;
+
     show_map_xy("PRESS ENTER TO START", 21, 1, 10, 25);
 
     for(int i=0; i<TERRAIN_TYPE_COUNT; i++)
@@ -280,6 +287,7 @@ void game_init(void)
         };
         show_map_xy(tiles, 1, 2, (SCREEN_WIDTH - TERRAIN_TYPE_COUNT) / 2 + i, 1);
     }
+    level_active = false; // Level is not active at initialization
 }
 
 void generate_terrain(void)
@@ -547,6 +555,9 @@ void game_update(uint16_t delta)
     (void)delta;
     seed++;
 
+    if(x_scroll_target+x_scroll_speed >= 0 && x_scroll_target+x_scroll_speed <= (MAP_WIDTH-SCREEN_WIDTH)*TILE_SIZE_PIXELS)
+        x_scroll_target += x_scroll_speed;
+
     if( x_scroll_target != x_scroll)
     {
         int16_t diff = x_scroll_target - x_scroll;
@@ -562,15 +573,14 @@ void game_update(uint16_t delta)
 
     char buffer[16];
     reset_sprite();
-    sprintf(buffer, "WIND %c%3d", wind < 0 ? '-' : '+', wind < 0 ? -wind : wind);
-    sprite_print(15*TILE_SIZE_PIXELS,0*TILE_SIZE_PIXELS, buffer);
-    sprite_print(2*TILE_SIZE_PIXELS,3*TILE_SIZE_PIXELS, "POWER ");
-    sprintf(buffer, "%3d", pillbox[0].power);
-    sprite_print(8*TILE_SIZE_PIXELS,3*TILE_SIZE_PIXELS, buffer);
-    sprite_print(2*TILE_SIZE_PIXELS,4*TILE_SIZE_PIXELS, "ANGLE ");
-    sprintf(buffer, "%3d", pillbox[0].angle);
-    sprite_print(8*TILE_SIZE_PIXELS,4*TILE_SIZE_PIXELS, buffer);
-
+    if(level_active) {
+        sprintf(buffer, "WIND %c%3d", wind < 0 ? '-' : '+', wind < 0 ? -wind : wind);
+        sprite_print(15*TILE_SIZE_PIXELS,0*TILE_SIZE_PIXELS, buffer);
+        sprintf(buffer, "POWER %3d", pillbox[0].power);
+        sprite_print(2*TILE_SIZE_PIXELS,3*TILE_SIZE_PIXELS, buffer);
+        sprintf(buffer, "ANGLE %3d", pillbox[0].angle);
+        sprite_print(2*TILE_SIZE_PIXELS,4*TILE_SIZE_PIXELS, buffer);
+    }
     update_rocket();
 }
 
@@ -597,6 +607,7 @@ void game_reset(void)
     wind = (rand() % 61) - 30; // Wind can be between -30 and +30 km/h
     x_scroll = 0;
     x_scroll_target = 0;
+    level_active = true; // Level becomes active after reset
     zvb_ctrl_l0_scr_x_low = x_scroll & 0xFF;
     zvb_ctrl_l0_scr_x_high = (x_scroll >> 8) & 0xFF;
     zvb_ctrl_l1_scr_x_low = x_scroll & 0xFF;
@@ -626,7 +637,6 @@ void game_render(void)
         if(tile != TILE_SHELL_RIGHT && rocket.vy > 0)
             flags |= SPRITE_FLAG_FLIP_Y;
 
-
         // Render the rocket sprite at its current position
        // if(rocket.sprite_index == 0)
             rocket.sprite_index = add_sprite(rocket.x +TILE_SIZE_PIXELS - x_scroll, rocket.y + TILE_SIZE_PIXELS, tile, flags);
@@ -640,15 +650,16 @@ void game_handle_input(uint8_t input, bool pressed)
 {
     if(input == INPUT_START && pressed)
         game_reset();
-    if(input == INPUT_L && pressed)
+    // Ignore input if the level is not active
+    if(!level_active) return;
+
+    if(input == INPUT_L)
     {
-        if(x_scroll_target >= 8)
-            x_scroll_target-=8;
+        x_scroll_speed=pressed?-SCROLL_SPEED:0;
     }
-    if(input == INPUT_R && pressed)
+    if(input == INPUT_R)
     {
-        if(x_scroll_target <= (MAP_WIDTH-SCREEN_WIDTH)*TILE_SIZE_PIXELS-8)
-            x_scroll_target+=8;
+        x_scroll_speed=pressed?SCROLL_SPEED:0;
     }
     if(input == INPUT_UP && pressed)
     {
