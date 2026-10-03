@@ -496,6 +496,37 @@ void generate_terrain(void)
         }
     }
 
+    // Now add grass below the terrain
+    for(int x = 0; x < MAP_WIDTH-1; x+=2)
+    {
+        int surface_row = (elevation_pixels[x] + TILE_SIZE_PIXELS - 1) /
+                          TILE_SIZE_PIXELS;
+        int y = surface_row - 1;
+        // Now choose a random height between the bottom of the terrain and the map height
+        y += rand() % (MAP_HEIGHT - y);
+        if(y < MAP_HEIGHT)
+        {
+            map1[y * MAP_WIDTH + x] = TILE_GRASS_2x1;
+            map1[y * MAP_WIDTH + x + 1] = TILE_GRASS_2x1 + 1;
+        }
+    }
+
+    // Also bushes TILE_BUSH_LG_2x2
+    for(int x = 0; x < MAP_WIDTH-1; x+=2) {
+        if(rand() % 20 == 0) // 5% chance of a bush
+        {
+            int surface_row = (elevation_pixels[x] + TILE_SIZE_PIXELS - 1) /
+                              TILE_SIZE_PIXELS;
+            int y = surface_row - 1;
+            if(y > 0)
+            {
+                map1[y * MAP_WIDTH + x] = TILE_BUSH_LG_2x2 +0x10;
+                map1[y * MAP_WIDTH + x + 1] = TILE_BUSH_LG_2x2 + 0x11;
+                map1[(y - 1) * MAP_WIDTH + x] = TILE_BUSH_LG_2x2 + 0x00;
+                map1[(y - 1) * MAP_WIDTH + x + 1] = TILE_BUSH_LG_2x2 + 0x01;
+            }
+        }
+    }
 }
 
 void place_pillboxes(void)
