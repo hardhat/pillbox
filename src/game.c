@@ -572,7 +572,6 @@ void place_pillboxes(void)
             pillbox[i].y = y;
         }
     }
-
 }
 
 void render_pillboxes(void)
