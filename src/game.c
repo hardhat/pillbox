@@ -581,6 +581,13 @@ void render_pillboxes(void)
     {
         int x = pillbox[i].x*TILE_SIZE_PIXELS - x_scroll;
         int y = pillbox[i].y*TILE_SIZE_PIXELS;
+        {
+            static bool rendered = false;
+            if(!rendered) {
+                debug_logf("Rendering pillbox at x=%d, y=%d", x, y);
+                rendered = true;
+            }
+        }
         if(x < -TILE_SIZE_PIXELS*2  || x > SCREEN_WIDTH*TILE_SIZE_PIXELS)
             continue;
         if(y > 0)
@@ -747,8 +754,11 @@ void game_reset(void)
 {
     srand(seed);
     generate_terrain();
-    for(int i=0;i<MAP_WIDTH;i++)
+    for(int i=0;i<MAP_WIDTH;i++) {
         map0[(MAP_HEIGHT-1)*MAP_WIDTH + i] = TILE_EMPTY;
+        map1[(MAP_HEIGHT-1)*MAP_WIDTH + i] = TILE_EMPTY;
+    }
+    place_pillboxes();
     pillbox[0].angle = 45;
     pillbox[0].power = 30;
     show_map(map0, MAP_WIDTH, MAP_HEIGHT);
