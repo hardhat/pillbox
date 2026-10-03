@@ -26,6 +26,8 @@
 #define HALF_TILE_PIXELS (TILE_SIZE_PIXELS / 2)
 #define SCROLL_SPEED 8
 #define TRACK_SCROLL_SPEED 12 // Must exceed the rocket's top horizontal speed (about 7 px/frame)
+#define POWER_INCREMENT 1
+#define ANGLE_INCREMENT 1
 
 uint16_t seed;
 int16_t x_scroll;
@@ -62,7 +64,7 @@ struct SpriteFrame {
 struct SpriteAnimation {
     uint8_t frame_count; // Number of frames in the explosion animation
     uint8_t duration; // Duration of each frame in ms
-    struct SpriteFrame *frames; // Indices of the sprites used for the explosion animation
+    const struct SpriteFrame *frames; // Indices of the sprites used for the explosion animation
 };
 
 const struct SpriteFrame explosion_frames[]={
@@ -435,10 +437,14 @@ void generate_terrain(void)
             (x & 1 ? TERRAIN_L1R1_O_G : TERRAIN_L1R1_E_G);
         for(int y = top_row + 2; y < MAP_HEIGHT; y += 2)
         {
-            map0[y * MAP_WIDTH + x] = terrain1x2[ground_type].tiles[0];
+            uint8_t final_ground = ground_type;
+            if((rand()&15)==0) {
+                final_ground = TERRAIN_L1R1_E_G + rand() % 12;  // 14 to 25
+            }
+            map0[y * MAP_WIDTH + x] = terrain1x2[final_ground].tiles[0];
             if(y + 1 < MAP_HEIGHT)
                 map0[(y + 1) * MAP_WIDTH + x] =
-                    terrain1x2[ground_type].tiles[1];
+                    terrain1x2[final_ground].tiles[1];
         }
     }
 
@@ -702,7 +708,7 @@ void render_animation(struct Animation *anim)
         return;
     // Render the current frame of the animation at its position
     // anchored at the bottom center
-    struct SpriteFrame *frame = &anim->animation->frames[anim->current_frame];
+    const struct SpriteFrame *frame = &anim->animation->frames[anim->current_frame];
     int16_t render_x = anim->x - x_scroll - (frame->width * TILE_SIZE_PIXELS / 2);
     int16_t render_y = anim->y - frame->height * TILE_SIZE_PIXELS;
     for(int16_t x=0;x<frame->width;x++)
@@ -766,19 +772,19 @@ void game_handle_input(uint8_t input, bool pressed)
     if(input == INPUT_UP && pressed)
     {
         if(pillbox[0].angle < 90)
-            pillbox[0].angle+=5;
+            pillbox[0].angle+=ANGLE_INCREMENT;
     } else if(input == INPUT_DOWN && pressed)
     {
         if(pillbox[0].angle > 0)
-            pillbox[0].angle-=5;
+            pillbox[0].angle-=ANGLE_INCREMENT;
     } else if(input == INPUT_LEFT && pressed)
     {
         if(pillbox[0].power > 0)
-            pillbox[0].power-=5;
+            pillbox[0].power-=POWER_INCREMENT;
     } else if(input == INPUT_RIGHT && pressed)
     {
         if(pillbox[0].power < 100)
-            pillbox[0].power+=5;
+            pillbox[0].power+=POWER_INCREMENT;
     } else if(input == INPUT_A && pressed)
     {
         if(!rocket.active)
