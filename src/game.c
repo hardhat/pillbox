@@ -85,7 +85,7 @@ const struct SpriteAnimation explosion_animation = {
 };
 
 struct Animation {
-    struct SpriteAnimation *animation; // null if no animation is currently active
+    const struct SpriteAnimation *animation; // null if no animation is currently active
     uint8_t current_frame; // Index of the current frame in the animation
     uint16_t elapsed_time; // Time elapsed since the current frame started in ms
     int16_t x; // X position of the animation in pixels anchored at bottom center
@@ -312,6 +312,14 @@ static void perturb_terrain(void)
     }
 }
 
+static bool is_flat(int x, int columns)
+{
+    for(int i = 0; i < columns; i++)
+        if(elevation_pixels[x + i] != elevation_pixels[x + i + 1])
+            return false;
+    return true;
+}
+
 void game_init(void)
 {
     x_scroll_speed = 0;
@@ -478,6 +486,23 @@ void generate_terrain(void)
                 map0[index + 1] = tile + 1;
     }
 
+    // Now add grass below the terrain
+    for(int x = 0; x < MAP_WIDTH-1; x+=2)
+    {
+        int surface_row = (elevation_pixels[x] + TILE_SIZE_PIXELS - 1) /
+                          TILE_SIZE_PIXELS;
+        int y = surface_row - 1;
+        // Now choose a random height between the bottom of the terrain and the map height
+        if(!is_flat(x, 2)) {
+            y += rand() % (MAP_HEIGHT - y);
+        }
+        if(y < MAP_HEIGHT)
+        {
+            map1[y * MAP_WIDTH + x] = TILE_GRASS_2x1;
+            map1[y * MAP_WIDTH + x + 1] = TILE_GRASS_2x1 + 1;
+        }
+    }
+
     // Next add trees above the terrain
     for(int x = 0; x < MAP_WIDTH; x++)
     {
@@ -486,6 +511,9 @@ void generate_terrain(void)
             int surface_row = (elevation_pixels[x] + TILE_SIZE_PIXELS - 1) /
                               TILE_SIZE_PIXELS;
             int y = surface_row - 1;
+            if(!is_flat(x, 1)) {
+                y += rand() % (MAP_HEIGHT - y);
+            }
             if(y > 0)
             {
                 uint8_t tile = rand() % 2 == 0 ? TILE_TREE1_1x2 : TILE_TREE2_1x2;
@@ -496,28 +524,16 @@ void generate_terrain(void)
         }
     }
 
-    // Now add grass below the terrain
-    for(int x = 0; x < MAP_WIDTH-1; x+=2)
-    {
-        int surface_row = (elevation_pixels[x] + TILE_SIZE_PIXELS - 1) /
-                          TILE_SIZE_PIXELS;
-        int y = surface_row - 1;
-        // Now choose a random height between the bottom of the terrain and the map height
-        y += rand() % (MAP_HEIGHT - y);
-        if(y < MAP_HEIGHT)
-        {
-            map1[y * MAP_WIDTH + x] = TILE_GRASS_2x1;
-            map1[y * MAP_WIDTH + x + 1] = TILE_GRASS_2x1 + 1;
-        }
-    }
-
     // Also bushes TILE_BUSH_LG_2x2
     for(int x = 0; x < MAP_WIDTH-1; x+=2) {
-        if(rand() % 20 == 0) // 5% chance of a bush
+        if((rand() % 5) == 0) // 20% chance of a bush
         {
             int surface_row = (elevation_pixels[x] + TILE_SIZE_PIXELS - 1) /
                               TILE_SIZE_PIXELS;
             int y = surface_row - 1;
+            if(!is_flat(x, 2)) {
+                y+= (rand() % 4) + 2; // Adjust y if the ground is not flat
+            }
             if(y > 0)
             {
                 map1[y * MAP_WIDTH + x] = TILE_BUSH_LG_2x2 +0x10;
@@ -534,24 +550,50 @@ void place_pillboxes(void)
     // Place both player pillboxes randomly on the terrain and update pillbox[i]
     for(int i = 0; i < 2; i++)
     {
-        int x = rand() % (MAP_WIDTH/4-1);
-        if(i == 1) x += 3 * MAP_WIDTH / 4;
-        int y = (elevation_pixels[x] + TILE_SIZE_PIXELS - 1) /
+        int range = MAP_WIDTH/4-1;
+        int first = i == 1 ? 3 * MAP_WIDTH / 4 : 0;
+        int start = rand() % range;
+        int x = first + start;
+        // Tiles can't follow a slope, so look for level ground and fall back to the random spot
+        for(int k = 0; k < range; k++)
+        {
+            int candidate = first + (start + k) % range;
+            if(is_flat(candidate, 2))
+            {
+                x = candidate;
+                break;
+            }
+        }
+        int y = (elevation_pixels[x + 1] + TILE_SIZE_PIXELS - 1) /
             TILE_SIZE_PIXELS;
         if(y > 0)
         {
-            uint8_t tile = TILE_PILLBOX+(i*6);
-            map1[y * MAP_WIDTH + x] = tile+0x10;
-            map1[y * MAP_WIDTH + x + 1] = tile+0x11; // Place the second part of the 2x1 pillbox tile
-            map1[(y - 1) * MAP_WIDTH + x] = tile;
-            map1[(y - 1) * MAP_WIDTH + x + 1] = tile+1; // Place the second part of the 2x1 pillbox tile
-            
             pillbox[i].x = x;
             pillbox[i].y = y;
         }
     }
 
 }
+
+void render_pillboxes(void)
+{
+    for(int i = 0; i < 2; i++)
+    {
+        int x = pillbox[i].x*TILE_SIZE_PIXELS - x_scroll;
+        int y = pillbox[i].y*TILE_SIZE_PIXELS;
+        if(x < -TILE_SIZE_PIXELS*2  || x > SCREEN_WIDTH*TILE_SIZE_PIXELS)
+            continue;
+        if(y > 0)
+        {
+            uint8_t tile = TILE_PILLBOX + (i * 6);
+            add_sprite(x, y, tile + 0x10, 0);
+            add_sprite(x+TILE_SIZE_PIXELS, y, tile + 0x11, 0); // Place the second part of the 2x2 pillbox tile
+            add_sprite(x, y-TILE_SIZE_PIXELS, tile, 0);
+            add_sprite(x+TILE_SIZE_PIXELS, y-TILE_SIZE_PIXELS, tile + 1, 0); // Place the second part of the 2x2 pillbox tile
+        }
+    }
+}
+
 
 void launch_rocket(uint8_t angle, uint8_t power)
 {
@@ -641,7 +683,7 @@ void update_active_animation(uint16_t delta)
     if(active_animation.animation == NULL)
         return;
 
-    active_animation.animation->duration += delta;
+    active_animation.elapsed_time += delta;
     if(active_animation.elapsed_time >= active_animation.animation->duration) {
         active_animation.elapsed_time = 0;
         active_animation.current_frame++;
@@ -696,6 +738,8 @@ void game_update(uint16_t delta)
         sprite_print(2*TILE_SIZE_PIXELS,3*TILE_SIZE_PIXELS, buffer);
         sprintf(buffer, "ANGLE %3d", pillbox[0].angle);
         sprite_print(2*TILE_SIZE_PIXELS,4*TILE_SIZE_PIXELS, buffer);
+        const char *message = " AIM WITH ARROWS, SPACE. ENTER TO RESET";
+        sprite_print(0, SCREEN_HEIGHT*TILE_SIZE_PIXELS - TILE_SIZE_PIXELS, message);
     }
 }
 
@@ -703,7 +747,8 @@ void game_reset(void)
 {
     srand(seed);
     generate_terrain();
-    place_pillboxes();
+    for(int i=0;i<MAP_WIDTH;i++)
+        map0[(MAP_HEIGHT-1)*MAP_WIDTH + i] = TILE_EMPTY;
     pillbox[0].angle = 45;
     pillbox[0].power = 30;
     show_map(map0, MAP_WIDTH, MAP_HEIGHT);
@@ -753,6 +798,8 @@ void game_render(void)
     zvb_ctrl_l0_scr_x_high = (x_scroll >> 8) & 0xFF;
     zvb_ctrl_l1_scr_x_low = x_scroll & 0xFF;
     zvb_ctrl_l1_scr_x_high = (x_scroll >> 8) & 0xFF;
+
+    render_pillboxes();
 
     if(rocket.active)
     {
