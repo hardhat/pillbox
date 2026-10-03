@@ -53,6 +53,43 @@ struct Rocket
     uint8_t sprite_index;
 } rocket;
 
+struct SpriteFrame {
+    uint8_t tile;   // Tile index of the top left corner of this frame (+1 or +0x10 for adjacent tiles)
+    uint8_t width;  // Width of this frame in tiles
+    uint8_t height; // Height of this frame in tiles
+};
+
+struct SpriteAnimation {
+    uint8_t frame_count; // Number of frames in the explosion animation
+    uint8_t duration; // Duration of each frame in ms
+    struct SpriteFrame *frames; // Indices of the sprites used for the explosion animation
+};
+
+const struct SpriteFrame explosion_frames[]={
+    {.tile = TILE_EXPLOSION3_2x2, .width = 2, .height = 2},
+    {.tile = TILE_EXPLOSION2_2x2, .width = 2, .height = 2},
+    {.tile = TILE_EXPLOSION1_2x2, .width = 2, .height = 2},
+    {.tile = TILE_DUST_LG2_2x2, .width = 2, .height = 2},
+    {.tile = TILE_DUST_LG1_2x2, .width = 1, .height = 2},
+    {.tile = TILE_DUST_MD_2x1, .width = 2, .height = 1},
+    {.tile = TILE_DUST_SM1, .width = 1, .height = 1},
+    {.tile = TILE_DUST_SM2, .width = 1, .height = 1},
+};
+
+const struct SpriteAnimation explosion_animation = {
+    .frame_count = 8,
+    .duration = 64,
+    .frames = explosion_frames,
+};
+
+struct Animation {
+    struct SpriteAnimation *animation; // null if no animation is currently active
+    uint8_t current_frame; // Index of the current frame in the animation
+    uint16_t elapsed_time; // Time elapsed since the current frame started in ms
+    int16_t x; // X position of the animation in pixels anchored at bottom center
+    int16_t y; // Y position of the animation in pixels anchored at bottom center
+} active_animation;
+
 #define ROCKET_SPEED_PER_PERCENT 4369 // 40 m/s at 100% power
 #define GRAVITY_Q16 1786              // 9.81 m/s^2
 #define WIND_KMH_Q16 3034             // 1 km/h
@@ -544,6 +581,13 @@ void update_rocket(void)
         rocket.active = false;
     else if(rocket.vy > 0 && rocket.y >= ground_pixels(rocket.x))
         rocket.active = false;
+    if(rocket.active==false) {
+        active_animation.animation = &explosion_animation;
+        active_animation.current_frame = 0;
+        active_animation.elapsed_time = 0;
+        active_animation.x = rocket.x;
+        active_animation.y = rocket.y;
+    }
 }
 
 void sprite_print(int16_t x, int16_t y, const char *str)
@@ -555,12 +599,29 @@ void sprite_print(int16_t x, int16_t y, const char *str)
     }
 }
 
+void update_active_animation(uint16_t delta)
+{
+    if(active_animation.animation == NULL)
+        return;
+
+    active_animation.animation->duration += delta;
+    if(active_animation.elapsed_time >= active_animation.animation->duration) {
+        active_animation.elapsed_time = 0;
+        active_animation.current_frame++;
+        if(active_animation.current_frame >= active_animation.animation->frame_count) {
+            active_animation.current_frame = 0;
+            active_animation.animation = NULL; // Stop the animation when it reaches the end
+        }
+    }
+}
+
 void game_update(uint16_t delta)
 {
     (void)delta;
     seed++;
 
     update_rocket();
+    update_active_animation(delta);
 
     int16_t max_scroll = (MAP_WIDTH-SCREEN_WIDTH)*TILE_SIZE_PIXELS;
     if(rocket.active)
@@ -625,10 +686,28 @@ void game_reset(void)
     x_scroll = 0;
     x_scroll_target = 0;
     level_active = true; // Level becomes active after reset
+    active_animation.animation = NULL; // Reset the active animation on game reset
+    active_animation.current_frame = 0;
+    active_animation.x = 0;
+    active_animation.y = 0;
     zvb_ctrl_l0_scr_x_low = x_scroll & 0xFF;
     zvb_ctrl_l0_scr_x_high = (x_scroll >> 8) & 0xFF;
     zvb_ctrl_l1_scr_x_low = x_scroll & 0xFF;
     zvb_ctrl_l1_scr_x_high = (x_scroll >> 8) & 0xFF;
+}
+
+void render_animation(struct Animation *anim)
+{
+    if(anim == NULL || anim->animation == NULL)
+        return;
+    // Render the current frame of the animation at its position
+    // anchored at the bottom center
+    struct SpriteFrame *frame = &anim->animation->frames[anim->current_frame];
+    int16_t render_x = anim->x - x_scroll - (frame->width * TILE_SIZE_PIXELS / 2);
+    int16_t render_y = anim->y - frame->height * TILE_SIZE_PIXELS;
+    for(int16_t x=0;x<frame->width;x++)
+        for(int16_t y=0;y<frame->height;y++)
+            add_sprite(render_x + x*TILE_SIZE_PIXELS, render_y + y*TILE_SIZE_PIXELS, frame->tile+(y * 0x10 + x), 0);
 }
 
 void game_render(void)
@@ -656,10 +735,16 @@ void game_render(void)
 
         // Render the rocket sprite at its current position
        // if(rocket.sprite_index == 0)
-            rocket.sprite_index = add_sprite(rocket.x +TILE_SIZE_PIXELS - x_scroll, rocket.y + TILE_SIZE_PIXELS, tile, flags);
+            rocket.sprite_index = add_sprite(rocket.x - x_scroll, rocket.y, tile, flags);
         //else
           //  update_sprite(rocket.sprite_index, rocket.x +TILE_SIZE_PIXELS - x_scroll, rocket.y + TILE_SIZE_PIXELS, tile, flags);
     }
+    if(active_animation.animation != NULL)
+    {
+        // Render the active animation at its current position
+        render_animation(&active_animation);
+    }
+    // Render all active sprites
     render_sprites();
 }
 
