@@ -1,7 +1,7 @@
 ZOS_PATH ?= ../Zeal-8-bit-OS
 ZVB_SDK_PATH ?= ../Zeal-VideoBoard-SDK
 BIN=bin/pillbox.bin
-OBJ=obj/main.rel obj/game.rel obj/menu.rel obj/img.rel
+OBJ=obj/main.rel obj/game.rel obj/menu.rel obj/sound.rel obj/img.rel
 IMG=img/pillboxtiles.zts
 CC=sdcc
 CFLAGS=-mz80 --std-c2x -c -I $(ZOS_PATH)/kernel_headers/sdcc/include/ -I $(ZVB_SDK_PATH)/include --codeseg TEXT --debug
@@ -37,8 +37,9 @@ img/title.zts: img/title.gif
 	$(ZVB_SDK_PATH)/tools/zeal2gif/gif2zeal.py -b 1 -i $<
 
 obj/game.rel: src/game.c src/game.h src/main.h
-obj/menu.rel: src/menu.c src/menu.h src/game.h
-obj/main.rel: src/main.c src/game.h src/menu.h src/img.h
+obj/menu.rel: src/menu.c src/menu.h src/game.h src/sound.h
+obj/main.rel: src/main.c src/game.h src/menu.h src/img.h img/title.h src/sound.h
+obj/sound.rel: src/sound.c src/sound.h
 obj/img.rel: src/img.asm $(IMG)
 
 clean:

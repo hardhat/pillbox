@@ -17,6 +17,7 @@
 #include<zvb_sprite.h>
 
 #include "game.h"
+#include "sound.h"
 
 #define SCREEN_WIDTH 40
 #define SCREEN_HEIGHT 30
@@ -24,7 +25,7 @@
 #define MAP_HEIGHT 30       // In tiles
 #define TILE_SIZE_PIXELS 16
 #define HALF_TILE_PIXELS (TILE_SIZE_PIXELS / 2)
-#define SCROLL_SPEED 8
+#define SCROLL_SPEED 12
 #define TRACK_SCROLL_SPEED 12 // Must exceed the rocket's top horizontal speed (about 7 px/frame)
 #define POWER_INCREMENT 1
 #define ANGLE_INCREMENT 1
@@ -336,6 +337,7 @@ void game_init(void)
         show_map_xy(tiles, 1, 2, (SCREEN_WIDTH - TERRAIN_TYPE_COUNT) / 2 + i, 1);
     }
     level_active = false; // Level is not active at initialization
+    sound_play(SOUND_FANFARE);
 }
 
 void generate_terrain(void)
@@ -459,7 +461,7 @@ void generate_terrain(void)
     const uint8_t cloud_tiles[3] = {
         TILE_CLOUD_2x1, TILE_CLOUD_SM_2x1, TILE_CLOUD_LG_2x1
     };
-    for(int cloud = 0; cloud < 7; cloud++)
+    for(int cloud = 0; cloud < 21; cloud++)
     {
         int x = (rand() % (MAP_WIDTH / 2)) * 2;
         int surface_pixels = elevation_pixels[x] < elevation_pixels[x + 1] ?
@@ -672,6 +674,7 @@ void update_rocket(void)
         active_animation.elapsed_time = 0;
         active_animation.x = rocket.x;
         active_animation.y = rocket.y;
+        sound_play(SOUND_EXPLODE);
     }
 }
 
@@ -785,6 +788,8 @@ void game_reset(void)
     zvb_ctrl_l0_scr_x_high = (x_scroll >> 8) & 0xFF;
     zvb_ctrl_l1_scr_x_low = x_scroll & 0xFF;
     zvb_ctrl_l1_scr_x_high = (x_scroll >> 8) & 0xFF;
+
+    sound_play(SOUND_STARTUP);
 }
 
 void render_animation(struct Animation *anim)
@@ -843,8 +848,9 @@ void game_render(void)
 
 void game_handle_input(uint8_t input, bool pressed)
 {
-    if(input == INPUT_START && pressed)
+    if(input == INPUT_START && pressed) {
         game_reset();
+    }
     // Ignore input if the level is not active
     if(!level_active) return;
 
@@ -858,23 +864,41 @@ void game_handle_input(uint8_t input, bool pressed)
     }
     if(input == INPUT_UP && pressed)
     {
-        if(pillbox[0].angle < 90)
+        if(pillbox[0].angle < 90) {
             pillbox[0].angle+=ANGLE_INCREMENT;
+            sound_play(SOUND_MOVE_CURSOR);
+        } else {
+            sound_play(SOUND_INVALID);
+        }
     } else if(input == INPUT_DOWN && pressed)
     {
-        if(pillbox[0].angle > 0)
+        if(pillbox[0].angle > 0) {
             pillbox[0].angle-=ANGLE_INCREMENT;
+            sound_play(SOUND_MOVE_CURSOR);
+        } else {
+            sound_play(SOUND_INVALID);
+        }
     } else if(input == INPUT_LEFT && pressed)
     {
-        if(pillbox[0].power > 0)
+        if(pillbox[0].power > 0) {
             pillbox[0].power-=POWER_INCREMENT;
+            sound_play(SOUND_MOVE_CURSOR);
+        } else {
+            sound_play(SOUND_INVALID);
+        }
     } else if(input == INPUT_RIGHT && pressed)
     {
-        if(pillbox[0].power < 100)
+        if(pillbox[0].power < 100) {
             pillbox[0].power+=POWER_INCREMENT;
+            sound_play(SOUND_MOVE_CURSOR);
+        } else {
+            sound_play(SOUND_INVALID);
+        }
     } else if(input == INPUT_A && pressed)
     {
-        if(!rocket.active)
+        if(!rocket.active) {
             launch_rocket(pillbox[0].angle, pillbox[0].power);
+            sound_play(SOUND_LAUNCH);
+        }
     }
 }

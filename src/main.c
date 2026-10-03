@@ -32,6 +32,7 @@
 #include "game.h"
 #include "menu.h"
 #include "img.h"
+#include "sound.h"
 #include "../img/title.h"
 
 gfx_context ctx;
@@ -357,12 +358,14 @@ int main(int argc, char *argv[]) {
     void* arg = (void*) (KB_READ_NON_BLOCK | KB_MODE_RAW);
     ioctl(DEV_STDIN, KB_CMD_SET_MODE, arg);
 
+    sound_init();
     // Main loop
     while (!done) {
         // Handle input
         process_input();
         gfx_wait_end_vblank(&ctx);
 
+        sound_update(16);
         // Update game and menu state
         switch(current_state) {
             case STATE_GAME:
@@ -371,7 +374,7 @@ int main(int argc, char *argv[]) {
             case STATE_MENU:
                 menu_update(16);
                 break;
-        }   
+        }
 
         gfx_wait_vblank(&ctx);
         // Render game and menu
